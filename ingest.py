@@ -15,8 +15,8 @@ load_dotenv()
 import fitz  # PyMuPDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+from embeddings import AVAILABLE_MODELS, DEFAULT_MODEL, get_embedding_model
 
 CHROMA_DIR = "./chroma_db"
 COLLECTION_NAME = "pdf_documents"
@@ -56,15 +56,17 @@ def chunk_pages(pages: list[dict]) -> list[Document]:
     return documents
 
 
-def get_embedding_model():
-    return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-mpnet-base-v2",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
-
-
 def build_vector_store(documents: list[Document], embedding_model) -> Chroma:
+    if os.path.exists(CHROMA_DIR):
+        import chromadb as _chromadb
+
+        _client = _chromadb.PersistentClient(path=CHROMA_DIR)
+        try:
+            _client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
+        del _client
+
     vectorstore = Chroma.from_documents(
         documents=documents,
         embedding=embedding_model,
@@ -74,7 +76,7 @@ def build_vector_store(documents: list[Document], embedding_model) -> Chroma:
     return vectorstore
 
 
-def ingest(pdf_path: str):
+def ingest(pdf_path: str, embedding_model: str = DEFAULT_MODEL):
     print(f"Loading PDF: {pdf_path}")
     pages = load_pdf(pdf_path)
     print(f"  Extracted {len(pages)} pages")
@@ -83,8 +85,11 @@ def ingest(pdf_path: str):
     documents = chunk_pages(pages)
     print(f"  Created {len(documents)} chunks")
 
-    print("Loading embedding model (first run downloads ~420MB)...")
-    embeddings = get_embedding_model()
+    size_hint = AVAILABLE_MODELS.get(embedding_model, "")
+    print(
+        f"Loading embedding model '{embedding_model}' ({size_hint}, first run downloads model)..."
+    )
+    embeddings = get_embedding_model(embedding_model)
 
     print("Embedding and storing in ChromaDB...")
     vectorstore = build_vector_store(documents, embeddings)

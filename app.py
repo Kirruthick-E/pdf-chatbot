@@ -1,12 +1,30 @@
 import os
+import io
+import sys
+import logging
+import warnings
 import tempfile
+
+# Suppress ModuleNotFoundError for optional vision deps (e.g. torchvision)
+# sentence-transformers tries to load CLIP/vision modules at import time;
+# they are not needed for text-only embeddings.
+warnings.filterwarnings("ignore")
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from ingest import ingest
-from rag_pipeline import build_rag_chain
+_stderr = sys.stderr
+sys.stderr = io.StringIO()
+try:
+    from ingest import ingest
+    from rag_pipeline import build_rag_chain
+    from embeddings import AVAILABLE_MODELS, DEFAULT_MODEL
+finally:
+    sys.stderr = _stderr
 
 st.set_page_config(page_title="PDF Chatbot", page_icon="📄", layout="centered")
 
@@ -17,10 +35,25 @@ if "rag_chain" not in st.session_state:
     st.session_state.rag_chain = None
 if "pdf_name" not in st.session_state:
     st.session_state.pdf_name = None
+if "embedding_model" not in st.session_state:
+    st.session_state.embedding_model = os.getenv("EMBEDDING_MODEL", DEFAULT_MODEL)
 
 # --- Sidebar ---
 with st.sidebar:
     st.header("Upload a PDF")
+
+    selected_model = st.selectbox(
+        "Embedding model",
+        options=list(AVAILABLE_MODELS.keys()),
+        index=list(AVAILABLE_MODELS.keys()).index(st.session_state.embedding_model),
+        format_func=lambda key: f"{key} — {AVAILABLE_MODELS[key]}",
+    )
+
+    if selected_model != st.session_state.embedding_model:
+        st.session_state.embedding_model = selected_model
+        st.session_state.rag_chain = None
+        st.session_state.pdf_name = None
+
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file is not None:
@@ -30,8 +63,10 @@ with st.sidebar:
                     tmp.write(uploaded_file.read())
                     tmp_path = tmp.name
 
-                ingest(tmp_path)
-                st.session_state.rag_chain = build_rag_chain()
+                ingest(tmp_path, embedding_model=st.session_state.embedding_model)
+                st.session_state.rag_chain = build_rag_chain(
+                    embedding_model=st.session_state.embedding_model
+                )
                 st.session_state.pdf_name = uploaded_file.name
                 st.session_state.chat_history = []
                 os.unlink(tmp_path)
@@ -42,7 +77,7 @@ with st.sidebar:
         st.info(f"Active: {st.session_state.pdf_name}")
 
     st.divider()
-    st.caption("LangChain · ChromaDB · all-mpnet-base-v2")
+    st.caption(f"LangChain · ChromaDB · {st.session_state.embedding_model}")
 
 # --- Main area ---
 st.title("PDF Chatbot")

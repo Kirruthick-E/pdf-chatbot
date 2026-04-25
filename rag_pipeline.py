@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_community.vectorstores import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
+from embeddings import DEFAULT_MODEL, get_embedding_model
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
@@ -38,19 +38,15 @@ def format_docs(docs):
     return "\n\n---\n\n".join(parts)
 
 
-def load_retriever():
+def load_retriever(embedding_model: str = DEFAULT_MODEL):
     if not os.path.exists(CHROMA_DIR):
         raise RuntimeError(
             f"Vector store not found at '{CHROMA_DIR}'. Run ingest.py on a PDF first."
         )
-    embedding_model = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-mpnet-base-v2",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    embedding_fn = get_embedding_model(embedding_model)
     vectorstore = Chroma(
         collection_name=COLLECTION_NAME,
-        embedding_function=embedding_model,
+        embedding_function=embedding_fn,
         persist_directory=CHROMA_DIR,
     )
     return vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
@@ -68,14 +64,6 @@ def load_llm():
             temperature=0.1,
             max_output_tokens=1024,
         )
-    elif provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-
-        return ChatAnthropic(
-            model=model or "claude-haiku-4-5-20251001",
-            temperature=0.1,
-            max_tokens=1024,
-        )
     elif provider == "ollama":
         from langchain_ollama import ChatOllama
 
@@ -86,12 +74,12 @@ def load_llm():
         )
     else:
         raise ValueError(
-            f"Unknown LLM_PROVIDER: {provider!r}. Use 'gemini', 'anthropic', or 'ollama'."
+            f"Unknown LLM_PROVIDER: {provider!r}. Use 'gemini' or 'ollama'."
         )
 
 
-def build_rag_chain():
-    retriever = load_retriever()
+def build_rag_chain(embedding_model: str = DEFAULT_MODEL):
+    retriever = load_retriever(embedding_model)
     llm = load_llm()
     chain = (
         {"context": retriever | format_docs, "question": RunnablePassthrough()}

@@ -5,10 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=0.97.0",
     "chromadb>=1.5.8",
     "langchain>=1.2.15",
-    "langchain-anthropic>=1.4.1",
     "langchain-community>=0.4.1",
     "langchain-huggingface>=0.1.0",
     "langchain-google-genai>=4.2.2",
