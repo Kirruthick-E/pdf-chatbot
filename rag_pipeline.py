@@ -60,7 +60,7 @@ def load_llm():
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
-            model=model or "gemini-2.0-flash",
+            model=model or "gemini-2.5-flash",
             temperature=0.1,
             max_output_tokens=1024,
         )
@@ -68,7 +68,7 @@ def load_llm():
         from langchain_ollama import ChatOllama
 
         return ChatOllama(
-            model=model or "gemma3",
+            model=model or "gemma4:e4b",
             temperature=0.1,
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
